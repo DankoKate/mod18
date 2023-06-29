@@ -1,0 +1,67 @@
+import requests
+import json
+import telebot
+
+TOKEN = 'your_token_here'
+
+bot = telebot.TeleBot(TOKEN)
+
+
+class APIException(Exception):
+    pass
+
+
+class CurrencyConverter:
+    @staticmethod
+    def get_price(base: str, quote: str, amount: float) -> float:
+        url = f'https://api.exchangerate-api.com/v4/latest/{base}'
+        response = requests.get(url)
+        data = json.loads(response.text)
+
+        if response.status_code != 200 or 'error' in data:
+            raise APIException('Failed to get exchange rate')
+
+        exchange_rate = data['rates'][quote]
+        return exchange_rate * amount
+
+
+@bot.message_handler(commands=['start', 'help'])
+def send_instructions(message):
+    instructions = "To get the price of a currency:  /convert <base_currency> <quote_currency> <amount>\n"
+    instructions += "To see all available currencies: /values"
+    bot.send_message(message.chat.id, instructions)
+
+
+@bot.message_handler(commands=['values'])
+def send_available_currencies(message):
+    currencies = "Available currencies:\n"
+    currencies += "- Euro (EUR)\n"
+    currencies += "- US Dollar (USD)\n"
+    currencies += "- Russian Ruble (RUB)"
+    bot.send_message(message.chat.id, currencies)
+
+
+@bot.message_handler(commands=['convert'])
+def convert_currency(message):
+    try:
+        command_args = message.text.split(' ')
+
+        if len(command_args) != 4:
+            raise APIException('Invalid command format')
+
+        base_currency = command_args[1].upper()
+        quote_currency = command_args[2].upper()
+        amount = float(command_args[3])
+
+        converted_amount = CurrencyConverter.get_price(base_currency, quote_currency, amount)
+        result_message = f'{amount} {base_currency} = {converted_amount} {quote_currency}'
+        bot.send_message(message.chat.id, result_message)
+
+    except APIException as e:
+        bot.send_message(message.chat.id, str(e))
+    except Exception as e:
+        bot.send_message(message.chat.id, 'An error occurred')
+
+
+if __name__ == '__main__':
+    bot.polling(none_stop=True)
